@@ -1,4 +1,4 @@
-# VGTRE InShort
+# vgtree InShort
 
 vgtree is a Python-based post-exploitation tool designed to assist ethical hackers and cybersecurity enthusiasts in their search for specific patterns/strings within the target system's files and directories. this tool i made can be also extends its search functionality within the output of system commands, mimicking the capabilities of traditional grep/find commands with a more user-friendly approach. while it doesnt replace them of-course, using it could be an extra thing.
 While i thought using it for myself, i have decided to share it with the community in the hopes that it might be useful to others.
