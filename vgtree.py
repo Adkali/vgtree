@@ -1,35 +1,29 @@
 import os
 import argparse
 import subprocess
+import re
 
 # {MADE BY Adkali - GITHUB, LINKEDIN}
 # {USE IT FOR EDUCATION PURPOSE ONLY.}
-# {THIS 100+ LINES CODE CAN BE A POWERFULLY WEAPON WHEN IT COMES TO POST-EXPLOITATION.}
-# {YOU CAN GATHER INFORMATION ABOUT THE SYSTEM.}
-# {SEARCH FOR PATTERNS/STRINGS/WORDS/CLUES/VERSIONS/LEFT-NOTES OR/AND EVERYTHING YOU CAME-UP WITH.}
-# {SEARCH THROUGH FILES - CHECK.}
-# {SEARCH THROUGH DIRECTORIES - CHECK.}
-# {INFORMATION OBTAINED CAN HELP IN THE NEXT STEPS.}
-# {THIS TOOL ACTS LIKE THE GREP/FIND COMMANDS, BUT MAKING IT MORE NICE TO USE.}
-
+# {THIS TOOL IS INTENDED FOR POST-EXPLOITATION INFORMATION GATHERING.}
+# {IT ACTS SIMILAR TO GREP/FIND, BUT OFFERS IMPROVED OUTPUT OPTIONS.}
 
 # ----- PRINTING RESULTS WITH COLORS -----
 
-def OutColors(text, color):
-    colorQ = {
-        'purple': '\033[95;1m', # Patterns Founds
-        'blue': '\033[94m', # Directories
-        'yellow': '\033[93;1m', # Founds Filesvgt
-        'red': '\033[91;1m', # Error / Execute
-        'end': '\033[0m', # End Of Colors
+def out_colors(text, color):
+    color_codes = {
+        'purple': '\033[95;1m',  # Patterns Found
+        'blue': '\033[94m',      # Directories
+        'yellow': '\033[93;1m',  # Found Files
+        'red': '\033[91;1m',     # Error / Command Output
+        'end': '\033[0m'         # Reset Color
     }
+    print(f"{color_codes.get(color, '')}{text}{color_codes['end']}")
 
-    print(f"{colorQ[color]}{text}{colorQ['end']}")
+ERROR_MSG = "Keep Moving..."
+VERSION = "1.1"
 
-Error = "Keep Moving..."
-version = "1.0"
-
-def Banner_Show():
+def banner_show():
     print(f'''
 |  _____  | V
 | |\ ___| | G
@@ -37,66 +31,127 @@ def Banner_Show():
 | | |___| | R
 \ | |____\| E
  \|_________E
-  v{version}
+  v{VERSION}
 ''')
 
+def search_in_file(file_path, pattern, regex=False, line_numbers=False, context=0):
+    """
+    Search for a pattern in a file.
+    Returns a list of tuples: (line_number, [context_lines]) for each match.
+    """
+    matches = []
+    try:
+        with open(file_path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+            for idx, line in enumerate(lines):
+                found = False
+                if regex:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        found = True
+                else:
+                    if pattern.lower() in line.lower():
+                        found = True
+                if found:
+                    start = max(0, idx - context)
+                    end = min(len(lines), idx + context + 1)
+                    context_lines = lines[start:end]
+                    matches.append((idx + 1, context_lines))
+    except Exception as e:
+        out_colors(f"Error reading {file_path}: {str(e)}", "red")
+    return matches
 
-parser = argparse.ArgumentParser(description=Banner_Show())
-parser.add_argument('-d', '--directory', type=str, help='Directory to search.')
-parser.add_argument('-f', '--file', type=str, help='File to search.')
-parser.add_argument('-e', '--execute', type=str, help='Search inside a command.')
-parser.add_argument('-p', '--pattern', type=str, required=True, help='Pattern/string/txt to search for.')
-args = parser.parse_args()
-
-
-# ----- DIRECTORIES, PATTERNS, COLORS -----
-
-def FindGrep(root, pattern, color):
+def find_grep(root, pattern, regex, line_numbers, context):
+    """
+    Recursively search through directories and files under 'root'
+    for the specified pattern.
+    """
     for dir_path, dir_names, file_names in os.walk(root):
-        # --- USE SPACES TO MAKE 'TREE' STRUCTURE.
+        # Use spaces for a tree-like structure based on directory depth
         indent = "    " * (len(dir_path.split(os.sep)) - len(root.split(os.sep)))
-        OutColors(f"{indent}│──{os.path.basename(dir_path)}", 'blue')
+        out_colors(f"{indent}│── {os.path.basename(dir_path)}", 'blue')
         for filename in file_names:
             file_path = os.path.join(dir_path, filename)
-            try:
-                with open(file_path, 'r', errors='ignore') as file:
-                    lines = file.readlines()
-                    for Newline in lines:
-                        if pattern.lower() in Newline.lower():
-                            OutColors(f"{indent}  │── {filename} <- Found Something", 'yellow')
-                            print("")
-                            OutColors(f"{indent}     └──  {Newline.strip()}", 'purple')
-                            break
-            except TypeError:
-                pass
-            except FileNotFoundError:
-                OutColors(f"{indent}{Error}", "red")
-            except OSError:
-                continue
+            matches = search_in_file(file_path, pattern, regex, line_numbers, context)
+            if matches:
+                out_colors(f"{indent}  │── {filename} <- Found Something", 'yellow')
+                for line_num, context_lines in matches:
+                    # Print each context line; if line_numbers enabled, approximate numbers are shown.
+                    for i, context_line in enumerate(context_lines):
+                        # Calculate a rough line number for context display
+                        display_line = (line_num - (len(context_lines) // 2)) + i
+                        if line_numbers:
+                            out_colors(f"{indent}     └── [{display_line}] {context_line.strip()}", 'purple')
+                        else:
+                            out_colors(f"{indent}     └── {context_line.strip()}", 'purple')
+                print("")  # Extra newline for clarity
 
+def search_in_file_single(file_path, pattern, regex, line_numbers, context):
+    """
+    Search a specific file and print matches directly.
+    """
+    try:
+        with open(file_path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+            for idx, line in enumerate(lines):
+                found = False
+                if regex:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        found = True
+                else:
+                    if pattern.lower() in line.lower():
+                        found = True
+                if found:
+                    if line_numbers:
+                        out_colors(f"[{idx+1}] {line.strip()}", 'purple')
+                    else:
+                        out_colors(line.strip(), 'purple')
+    except Exception as e:
+        out_colors(f"Error reading {file_path}: {str(e)}", "red")
+
+def execute_and_search(command, pattern, regex, line_numbers, context):
+    """
+    Execute a shell command, capture its output, and search for the pattern.
+    """
+    command_output = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout
+    lines = command_output.splitlines()
+    for idx, line in enumerate(lines):
+        found = False
+        if regex:
+            if re.search(pattern, line, re.IGNORECASE):
+                found = True
+        else:
+            if pattern.lower() in line.lower():
+                found = True
+        if found:
+            if line_numbers:
+                out_colors(f"[{idx+1}] {line.strip()}", 'red')
+            else:
+                out_colors(line.strip(), 'red')
 
 def main():
-    if args.directory:
-        FindGrep(args.directory, args.pattern, 'purple')
-    elif args.file:
-        try:
-            with open(args.file, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    if args.pattern.lower() in line.lower():
-                        OutColors(line.strip(), 'purple')
-        except IsADirectoryError:
-            print(f"{args.file} is a directory!")
-            print("Use '-f' on the specific file if you want to find pattern.")
-    elif args.execute:
-        command_output = subprocess.run(args.execute, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout
-        cmd = command_output.split('\n')
-        for line in cmd:
-            if args.pattern.lower() in line.lower():
-                OutColors(line.strip(), 'red')
-    else:
-        FindGrep(os.getcwd(), args.pattern, 'purple')
+    banner_show()
+    parser = argparse.ArgumentParser(
+        description="Search for a pattern in files, directories, or command output.\n"
+                    "Enhanced with regex support, line numbers, and context options."
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-d', '--directory', type=str, help='Directory to search.')
+    group.add_argument('-f', '--file', type=str, help='File to search.')
+    group.add_argument('-e', '--execute', type=str, help='Command to execute and search its output.')
+    parser.add_argument('-p', '--pattern', type=str, required=True, help='Pattern/string/text to search for.')
+    parser.add_argument('--regex', action='store_true', help='Treat the pattern as a regular expression.')
+    parser.add_argument('--line-numbers', action='store_true', help='Display line numbers in the output.')
+    parser.add_argument('--context', type=int, default=0, help='Show additional context lines before and after each match (default: 0).')
+    args = parser.parse_args()
 
+    if args.directory:
+        find_grep(args.directory, args.pattern, args.regex, args.line_numbers, args.context)
+    elif args.file:
+        search_in_file_single(args.file, args.pattern, args.regex, args.line_numbers, args.context)
+    elif args.execute:
+        execute_and_search(args.execute, args.pattern, args.regex, args.line_numbers, args.context)
+    else:
+        find_grep(os.getcwd(), args.pattern, args.regex, args.line_numbers, args.context)
 
 if __name__ == '__main__':
     main()
